@@ -1,0 +1,479 @@
+classdef testModel < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        ModelTesting                    matlab.ui.Figure
+        footer                          matlab.ui.container.Panel
+        gitHubButton                    matlab.ui.control.Button
+        middlesexButton                 matlab.ui.control.Button
+        DevelopedbyLabel                matlab.ui.control.Label
+        MomchilGalabovLabel             matlab.ui.control.Label
+        TestModelButton                 matlab.ui.control.Button
+        BrowseHealthyPathTest           matlab.ui.control.Button
+        BrowseUnhealthyPathTest         matlab.ui.control.Button
+        ButtonGroup                     matlab.ui.container.ButtonGroup
+        JPEGButtonTest                  matlab.ui.control.RadioButton
+        JPGButtonTest                   matlab.ui.control.RadioButton
+        ImageformatLabel                matlab.ui.control.Label
+        HealthyXRayfoldertestdataLabel  matlab.ui.control.Label
+        HealthyFolderPathTest           matlab.ui.control.EditField
+        UnhealthyXRayfoldertestdataLabel  matlab.ui.control.Label
+        UnhealthyFolderPathTest         matlab.ui.control.EditField
+        HelpButton                      matlab.ui.control.Button
+        BrowseModelButton               matlab.ui.control.Button
+        ClassificationmodelLabel        matlab.ui.control.Label
+        ModelFolderPath                 matlab.ui.control.EditField
+        BrowseTestResultsFolderPathButton  matlab.ui.control.Button
+        ResultsFolderLabel              matlab.ui.control.Label
+        TestResultsPath                 matlab.ui.control.EditField
+    end
+
+    
+    methods (Access = private)
+        
+        % Counts images of a specific type within a folder
+        % Returns the image count
+        function imageCount = checkImageCount(app, folderPath, imageFormat)
+            a = dir(fullfile(folderPath, imageFormat));
+            imageCount = size(a,1);
+        end
+        
+        % Determines the image format of photos using the radio button
+        % Returns the image format 
+        function imageFormatTest = getImageFormatTest(app)
+            if app.JPEGButtonTest.Value == 1
+                imageFormatTest = '*.jpeg';
+            elseif app.JPEGButtonTest.Value == 1
+                imageFormatTest = '*.jpg';
+            end
+        end
+        
+        % Checking contents of folders for testing
+        function [] = checkPathsTest(app)
+            
+            healthyFolderPathTest = app.HealthyFolderPathTest.Value;
+            unhealthyFolderPathTest = app.UnhealthyFolderPathTest.Value;
+            imageFormatTest = getImageFormatTest(app);
+            
+            healthyTestImageCount = checkImageCount(app, healthyFolderPathTest, imageFormatTest);
+            unhealthyTestImageCount = checkImageCount(app, unhealthyFolderPathTest, imageFormatTest);
+        
+           if healthyTestImageCount < 100
+                f = app.ModelTesting;
+                message = sprintf('The model requires at least 100 images of type "Healthy" for testing. Make sure the correct image format is specified or add images!');
+                uialert(f,message,'Error','Icon','error');
+                error('Insufficient number of test images');
+            elseif unhealthyTestImageCount < 100
+                f = app.ModelTesting;
+                message = sprintf('The model requires at least 100 images of type "Diseased" for testing. Make sure the correct image format is specified or add images!');
+                uialert(f,message,'Error','Icon','error');
+                error('Insufficient number of test images');
+            end
+        end
+        
+        % Retrieves the labels of images for testing and saves them in the Accuracy file
+        function [] = generateLabelsTest(app, classes)
+            imageFormat = getImageFormatTest(app);
+            healthyFolderPathTest = app.HealthyFolderPathTest.Value;
+            unhealthyFolderPathTest = app.UnhealthyFolderPathTest.Value;
+            testResultsFolderPath = app.TestResultsPath.Value;
+            
+            cd(unhealthyFolderPathTest);
+            A = dir(imageFormat);
+            labelsArrA = repmat(classes(1),size(A,1),1);
+            
+            cd(healthyFolderPathTest);
+            N = dir(imageFormat);
+            labelsArrN = repmat(classes(2),size(N,1),1);
+            
+            actualLabels = [labelsArrA; labelsArrN];
+            cd(testResultsFolderPath);
+            save('Labels','actualLabels');
+            
+        end
+        
+        % Labels each image in the test dataset. and saves the labels
+        function [] = classifyTestData(app, model)
+            testDataDirectory = app.TestResultsPath.Value;
+            
+            cd(testDataDirectory);
+            features = load('Features.mat');
+            
+            labels = predict(model,features.featureVectors);
+            predictedLabels = string(labels);
+            save('Labels','predictedLabels','-append');
+            delete('Features.mat');
+        end
+        
+        % Extracts features and generates a feature vector for each image
+        % Saves the array of feature vetctors in the TestData
+        function [] = extractFeaturesTest(app, numNeighbours, radius)
+            featureVectors = zeros(0,0);
+            
+            healthyFolderPathTest = app.HealthyFolderPathTest.Value;
+            unhealthyFolderPathTest = app.UnhealthyFolderPathTest.Value;
+            imageFormat = getImageFormatTest(app);
+            
+            for i = 1 : 2
+                
+                folderPath = '';
+                if i == 1
+                    folderPath = unhealthyFolderPathTest;
+                elseif i == 2
+                    folderPath = healthyFolderPathTest;
+                end
+                
+                imageFiles = dir(fullfile(folderPath,imageFormat));
+                
+                for j = 1 : length(imageFiles)
+                    baseFileName = imageFiles(j).name;
+                    fullFileName = fullfile(folderPath, baseFileName);
+                    image = imread(fullFileName);
+                    
+                    if size(image,3)== 3
+                        image = rgb2gray(image);
+                    end
+                    
+                    imageLBP = extractLBPFeatures(image,'Upright',false,'Radius',radius,'NumNeighbors',numNeighbours);
+                    
+                    featureVectors = [featureVectors; imageLBP];
+                end
+            end
+            
+            featureVectors = array2table(featureVectors);
+            
+            save('Features','featureVectors');    
+        end
+        
+        % Calculates the accuracy of the model based on the predicted and actual labels.
+        % Returns the accuracy in percentage
+        function accuracyPercentage = getAccuracy(app)
+            testResultsDirectory = app.TestResultsPath.Value;
+            cd(testResultsDirectory);
+            
+            labels = load('Labels.mat');
+            accuracyPercentage = 0.0;
+            
+            if length(labels.actualLabels) == length(labels.predictedLabels)
+                
+                total = length(labels.actualLabels);
+                matching = 0;
+                
+                for k=1:length(labels.actualLabels)
+                    if strcmp(labels.actualLabels{k},labels.predictedLabels{k})
+                        matching = matching + 1;
+                    end
+                end
+                
+                i = (matching / total) * 100;
+                accuracyPercentage = round(i, 1);
+                
+                save('Labels','accuracyPercentage','-append');
+            end
+        end
+    
+    end
+    
+
+    methods (Access = private)
+
+        % Button pushed function: BrowseHealthyPathTest
+        function browseHealthyButtonPushed(app, event)
+            folderPath = uigetdir('C://','Select healthy test data');
+            if folderPath == 0
+                return
+            end
+            app.HealthyFolderPathTest.Value = folderPath;
+        end
+
+        % Button pushed function: BrowseUnhealthyPathTest
+        function browseDiseasedButtonPushed(app, event)
+            folderPath = uigetdir('C://','Select Unhealthy test data');
+            
+            if folderPath == 0
+                return
+            end
+            app.UnhealthyFolderPathTest.Value = folderPath;
+            
+        end
+
+        % Button pushed function: TestModelButton
+        function testModelButtonPushed(app, event)
+            classes = ["diseased", "healthy"];
+            modelDirectory = app.ModelFolderPath.Value;
+            parentWindow =  app.ModelTesting;
+            
+            % Tests if the model selected by the user is valid
+             try
+                modelPackage = load(modelDirectory);
+                model = modelPackage.svmModel;
+                numNeighbours = modelPackage.numNeighbours;
+                radius = modelPackage.radius;
+            catch msg
+                message = sprintf('Specified model is not valid. Please choose a valid SVM Model!');
+                uialert(parentWindow,message,'Error','Icon','error');
+            end
+
+            progressBar = uiprogressdlg(parentWindow,'Title','Please Wait!');
+            
+            progressBar.Message = 'Checking Paths...';
+            progressBar.Value = 0;
+            checkPathsTest(app);
+            pause(1);
+            
+            progressBar.Message = 'Generating Lables...';
+            progressBar.Value = 0.2;
+            generateLabelsTest(app, classes);
+            pause(1);
+            
+            progressBar.Value = 0.5;
+            progressBar.Message = 'Extracting Features...';
+            extractFeaturesTest(app, numNeighbours, radius);
+            
+            
+            progressBar.Value = 0.8;
+            progressBar.Message = 'Classifying Test Data...';
+            classifyTestData(app, model);
+            
+            progressBar.Value = 0.9;
+            progressBar.Message = 'Calculating accuracy...';
+            accuracy = getAccuracy(app);
+            pause(1.5);
+            
+            progressBar.Value = 1;
+            progressBar.Message = 'Finishing...';
+            pause(1);
+            
+            close(progressBar);
+
+            message = sprintf('You have tested the model! Accuracy: %.3g%%', accuracy);
+            uialert(parentWindow,message,'Success','Icon','success');
+             
+            
+        end
+
+        % Button pushed function: BrowseModelButton
+        function browseModelButtonPushed(app, event)
+
+            [file,path] = uigetfile('C://','Select a model');
+          
+            if path == 0
+                loadModel(app);
+                return
+            end
+            app.ModelFolderPath.Value = [path,file];
+        end
+
+        % Button pushed function: BrowseTestResultsFolderPathButton
+        function browseResultsFolderButtonPushed(app, event)
+            folderPath = uigetdir('C://','Select healthy test data');
+            
+            if folderPath == 0
+                return
+            end
+            app.TestResultsPath.Value = folderPath;
+            
+        end
+
+        % Button pushed function: gitHubButton
+        function gitHubButtonPushed(app, event)
+            url = 'https://github.com/linderfight/XrayClassifier';
+            web(url,'-browser');
+        end
+
+        % Button pushed function: middlesexButton
+        function middlesexButtonPushed(app, event)
+            url = 'https://www.mdx.ac.uk/';
+            web(url,'-browser');
+        end
+
+        % Button pushed function: HelpButton
+        function helpButtonPushed(app, event)
+            parentWindow =  app.ModelTesting;
+            message = sprintf('1. Select the format of the images for testing\n2. Specify the classification model to be tested\n3. Select folders with "Healthy" and "Diseased" X-ray samples for testing\4Specify the folder that will hold the test results\n5. Test your model');
+            uialert(parentWindow,message,'Info','Icon','info');
+        end
+    end
+
+    % App initialization and construction
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create ModelTesting
+            app.ModelTesting = uifigure;
+            app.ModelTesting.AutoResizeChildren = 'off';
+            app.ModelTesting.Position = [100 100 640 305];
+            app.ModelTesting.Name = 'Model Testing';
+            app.ModelTesting.Resize = 'off';
+
+            % Create footer
+            app.footer = uipanel(app.ModelTesting);
+            app.footer.AutoResizeChildren = 'off';
+            app.footer.Position = [1 1 640 30];
+
+            % Create gitHubButton
+            app.gitHubButton = uibutton(app.footer, 'push');
+            app.gitHubButton.ButtonPushedFcn = createCallbackFcn(app, @gitHubButtonPushed, true);
+            app.gitHubButton.Interruptible = 'off';
+            app.gitHubButton.Icon = 'github-logo.png';
+            app.gitHubButton.BackgroundColor = [1 1 1];
+            app.gitHubButton.Position = [1 1 57 28];
+            app.gitHubButton.Text = '';
+
+            % Create middlesexButton
+            app.middlesexButton = uibutton(app.footer, 'push');
+            app.middlesexButton.ButtonPushedFcn = createCallbackFcn(app, @middlesexButtonPushed, true);
+            app.middlesexButton.Interruptible = 'off';
+            app.middlesexButton.Icon = 'mdx-london-logo-red-black.png';
+            app.middlesexButton.Position = [581 1 58 28];
+            app.middlesexButton.Text = '';
+
+            % Create DevelopedbyLabel
+            app.DevelopedbyLabel = uilabel(app.footer);
+            app.DevelopedbyLabel.HorizontalAlignment = 'center';
+            app.DevelopedbyLabel.FontSize = 10;
+            app.DevelopedbyLabel.FontWeight = 'bold';
+            app.DevelopedbyLabel.Position = [233 16 178 13];
+            app.DevelopedbyLabel.Text = {'Developed by: '; ''};
+
+            % Create MomchilGalabovLabel
+            app.MomchilGalabovLabel = uilabel(app.footer);
+            app.MomchilGalabovLabel.HorizontalAlignment = 'center';
+            app.MomchilGalabovLabel.FontSize = 10;
+            app.MomchilGalabovLabel.Position = [261 1 125 16];
+            app.MomchilGalabovLabel.Text = {'Momchil Galabov'; ''};
+
+            % Create TestModelButton
+            app.TestModelButton = uibutton(app.ModelTesting, 'push');
+            app.TestModelButton.ButtonPushedFcn = createCallbackFcn(app, @testModelButtonPushed, true);
+            app.TestModelButton.Position = [259 46 124 22];
+            app.TestModelButton.Text = 'Test Model';
+
+            % Create BrowseHealthyPathTest
+            app.BrowseHealthyPathTest = uibutton(app.ModelTesting, 'push');
+            app.BrowseHealthyPathTest.ButtonPushedFcn = createCallbackFcn(app, @browseHealthyButtonPushed, true);
+            app.BrowseHealthyPathTest.Position = [548 168 72 22];
+            app.BrowseHealthyPathTest.Text = 'Browse';
+
+            % Create BrowseUnhealthyPathTest
+            app.BrowseUnhealthyPathTest = uibutton(app.ModelTesting, 'push');
+            app.BrowseUnhealthyPathTest.ButtonPushedFcn = createCallbackFcn(app, @browseDiseasedButtonPushed, true);
+            app.BrowseUnhealthyPathTest.Position = [548 137 72 22];
+            app.BrowseUnhealthyPathTest.Text = 'Browse';
+
+            % Create ButtonGroup
+            app.ButtonGroup = uibuttongroup(app.ModelTesting);
+            app.ButtonGroup.AutoResizeChildren = 'off';
+            app.ButtonGroup.Position = [226 242 100 51];
+
+            % Create JPEGButtonTest
+            app.JPEGButtonTest = uiradiobutton(app.ButtonGroup);
+            app.JPEGButtonTest.Text = 'JPEG';
+            app.JPEGButtonTest.Position = [11 24 58 22];
+            app.JPEGButtonTest.Value = true;
+
+            % Create JPGButtonTest
+            app.JPGButtonTest = uiradiobutton(app.ButtonGroup);
+            app.JPGButtonTest.Text = 'JPG';
+            app.JPGButtonTest.Position = [11 2 65 22];
+
+            % Create ImageformatLabel
+            app.ImageformatLabel = uilabel(app.ModelTesting);
+            app.ImageformatLabel.Position = [120 271 78 22];
+            app.ImageformatLabel.Text = 'Image format:';
+
+            % Create HealthyXRayfoldertestdataLabel
+            app.HealthyXRayfoldertestdataLabel = uilabel(app.ModelTesting);
+            app.HealthyXRayfoldertestdataLabel.HorizontalAlignment = 'right';
+            app.HealthyXRayfoldertestdataLabel.Position = [25 168 177 22];
+            app.HealthyXRayfoldertestdataLabel.Text = 'Healthy X-Ray folder (test data):';
+
+            % Create HealthyFolderPathTest
+            app.HealthyFolderPathTest = uieditfield(app.ModelTesting, 'text');
+            app.HealthyFolderPathTest.Editable = 'off';
+            app.HealthyFolderPathTest.Position = [226 168 301 22];
+            app.HealthyFolderPathTest.Value = 'C:\Users\momch\Desktop\Final Year project\Implementation\Classifier\Dataset\test\HEALTHY';
+
+            % Create UnhealthyXRayfoldertestdataLabel
+            app.UnhealthyXRayfoldertestdataLabel = uilabel(app.ModelTesting);
+            app.UnhealthyXRayfoldertestdataLabel.HorizontalAlignment = 'right';
+            app.UnhealthyXRayfoldertestdataLabel.Position = [11 137 191 22];
+            app.UnhealthyXRayfoldertestdataLabel.Text = 'Unhealthy X-Ray folder (test data):';
+
+            % Create UnhealthyFolderPathTest
+            app.UnhealthyFolderPathTest = uieditfield(app.ModelTesting, 'text');
+            app.UnhealthyFolderPathTest.Editable = 'off';
+            app.UnhealthyFolderPathTest.Position = [226 137 301 22];
+            app.UnhealthyFolderPathTest.Value = 'C:\Users\momch\Desktop\Final Year project\Implementation\Classifier\Dataset\test\DISEASED';
+
+            % Create HelpButton
+            app.HelpButton = uibutton(app.ModelTesting, 'push');
+            app.HelpButton.ButtonPushedFcn = createCallbackFcn(app, @helpButtonPushed, true);
+            app.HelpButton.Icon = 'question.png';
+            app.HelpButton.Position = [564 46 39 33];
+            app.HelpButton.Text = '';
+
+            % Create BrowseModelButton
+            app.BrowseModelButton = uibutton(app.ModelTesting, 'push');
+            app.BrowseModelButton.ButtonPushedFcn = createCallbackFcn(app, @browseModelButtonPushed, true);
+            app.BrowseModelButton.Position = [548 203 72 22];
+            app.BrowseModelButton.Text = 'Browse';
+
+            % Create ClassificationmodelLabel
+            app.ClassificationmodelLabel = uilabel(app.ModelTesting);
+            app.ClassificationmodelLabel.HorizontalAlignment = 'right';
+            app.ClassificationmodelLabel.Position = [82 203 116 22];
+            app.ClassificationmodelLabel.Text = 'Classification model:';
+
+            % Create ModelFolderPath
+            app.ModelFolderPath = uieditfield(app.ModelTesting, 'text');
+            app.ModelFolderPath.Editable = 'off';
+            app.ModelFolderPath.Position = [227 203 300 22];
+            app.ModelFolderPath.Value = 'C:\Users\momch\Desktop\Final Year project\Implementation\Classifier\XrayClassifierApp\preTrainedModel\trainedModel.mat';
+
+            % Create BrowseTestResultsFolderPathButton
+            app.BrowseTestResultsFolderPathButton = uibutton(app.ModelTesting, 'push');
+            app.BrowseTestResultsFolderPathButton.ButtonPushedFcn = createCallbackFcn(app, @browseResultsFolderButtonPushed, true);
+            app.BrowseTestResultsFolderPathButton.Position = [548 99 72 22];
+            app.BrowseTestResultsFolderPathButton.Text = 'Browse';
+
+            % Create ResultsFolderLabel
+            app.ResultsFolderLabel = uilabel(app.ModelTesting);
+            app.ResultsFolderLabel.HorizontalAlignment = 'right';
+            app.ResultsFolderLabel.Position = [112 99 86 22];
+            app.ResultsFolderLabel.Text = 'Results Folder:';
+
+            % Create TestResultsPath
+            app.TestResultsPath = uieditfield(app.ModelTesting, 'text');
+            app.TestResultsPath.Editable = 'off';
+            app.TestResultsPath.Position = [227 99 300 22];
+            app.TestResultsPath.Value = 'C:\Users\momch\Desktop\Final Year project\Implementation\Classifier\Dataset\test\results';
+        end
+    end
+
+    methods (Access = public)
+
+        % Construct app
+        function app = testModel
+
+            % Create and configure components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.ModelTesting)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.ModelTesting)
+        end
+    end
+end

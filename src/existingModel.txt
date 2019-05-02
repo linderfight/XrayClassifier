@@ -1,0 +1,368 @@
+classdef existingModel < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        ExistingModel              matlab.ui.Figure
+        BrowseClassificationFolderButton  matlab.ui.control.Button
+        ClassificationmodelLabel   matlab.ui.control.Label
+        ModelFolderPath            matlab.ui.control.EditField
+        BrowseModelButton          matlab.ui.control.Button
+        ClassificationfolderLabel  matlab.ui.control.Label
+        ClassificationFolderPath   matlab.ui.control.EditField
+        ClassifyXraysButton        matlab.ui.control.Button
+        footer                     matlab.ui.container.Panel
+        DevelopedbyLabel           matlab.ui.control.Label
+        MomchilGalabovLabel        matlab.ui.control.Label
+        middlesexButton            matlab.ui.control.Button
+        gitHubButton               matlab.ui.control.Button
+        ImageformatLabel           matlab.ui.control.Label
+        ImageFormatButtons         matlab.ui.container.ButtonGroup
+        JPEGButton                 matlab.ui.control.RadioButton
+        JPGButton                  matlab.ui.control.RadioButton
+        HelpButton                 matlab.ui.control.Button
+    end
+
+    
+    methods (Access = private)
+        
+        % Counts images of a specific type within a folder
+        % Returns the image count
+        function imageCount = checkImageCount(app, folderPath, imageFormat)
+            a = dir(fullfile(folderPath, imageFormat));
+            imageCount = size(a,1);
+        end
+        
+        % Determines the image format of photos using the radio button
+        % Returns the image format 
+        function imageFormat = getImageFormat(app)
+            if app.JPEGButton.Value == 1
+                imageFormat = '*.jpeg';
+            elseif app.JPEGButton.Value == 1
+                imageFormat = '*.jpg';
+            end
+        end
+        
+        % Checking contents of folders for classifying
+        function [] = checkPaths(app)
+            classificationDirectory = app.ClassificationFolderPath.Value;
+            imageFormat = getImageFormat(app);
+            
+            classificationImageCount = checkImageCount(app, classificationDirectory, imageFormat);
+            
+            if classificationImageCount < 1
+                f = app.ExistingModel;
+                message = sprintf('The folder for classification is empty! Please add more images or change the image format!');
+                uialert(f,message,'Error','Icon','error');
+                error('Empty classification folder');
+            end
+            
+        end
+        
+        % Extracts features from images for classification
+        % Returns a 2D table containing the feature vectors of each image
+        function featureVectors = extractFeatures(app, classificationDirectory, modelPackage)
+            numNeighbours = modelPackage.numNeighbours;
+            radius = modelPackage.radius;
+            featureVectors = zeros(0,0);
+            imageFormat = getImageFormat(app);   
+            imageFiles = dir(fullfile(classificationDirectory,imageFormat));  
+            for j = 1 : length(imageFiles)
+                baseFileName = imageFiles(j).name;
+                disp(baseFileName);
+                fullFileName = fullfile(classificationDirectory, baseFileName);
+                image = imread(fullFileName); 
+                if size(image,3)== 3
+                    image = rgb2gray(image);
+                end
+                imageLBP = extractLBPFeatures(image,'Upright', false,'Radius', radius,'NumNeighbors', numNeighbours);
+                featureVectors = [featureVectors; imageLBP];
+            end
+            featureVectors = array2table(featureVectors);
+        end
+        
+        % Sorts the labelled images into folders depending on their label
+        function [] = sortImages(app, classificationDirectory, predictedLabels)
+            imageFormat = getImageFormat(app);
+            
+            healthyStatus = mkdir(classificationDirectory, 'Healthy');
+            diseasedStatus = mkdir(classificationDirectory, 'Diseased');
+            
+            
+            if healthyStatus == 0 || diseasedStatus == 0
+                f = existingModel;
+                message = sprintf('Classification folders could not be created');
+                uialert(f,message,'Error','Icon','error');
+                return
+            end
+            
+            healthyFolder = fullfile(classificationDirectory,'Healthy');
+            diseasedFolder = fullfile(classificationDirectory,'Diseased');
+            
+            imageFiles = dir(fullfile(classificationDirectory,imageFormat));
+            for i = 1 : length(imageFiles)
+                baseFileName = imageFiles(i).name;
+                file = fullfile(classificationDirectory, baseFileName);
+                class = predictedLabels(i);
+                
+                if string(class) == 'healthy'
+                    movefile(file,healthyFolder);
+                elseif string(class) == 'diseased'
+                    movefile(file,diseasedFolder);
+                end
+                
+            end
+        end
+    end
+    
+
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function loadModel(app)
+            modelName = 'Model.mat';
+            modelFolder = 'preTrainedModel';
+            modelDirectory = fullfile(pwd,modelFolder,modelName);
+            app.ModelFolderPath.Value = modelDirectory;
+        end
+
+        % Button pushed function: BrowseClassificationFolderButton
+        function browseClassificationFolderButtonPushed(app, event)
+            folderPath = uigetdir('C://','Select the folder containing images for classification');
+            
+            if folderPath == 0
+                return
+            end
+            app.ClassificationFolderPath.Value = folderPath;
+            
+        end
+
+        % Button pushed function: BrowseModelButton
+        function browseModelButtonPushed(app, event)
+            [file,path] = uigetfile('C://','Select a model');
+          
+            if path == 0
+                loadModel(app);
+                return
+            end
+            app.ModelFolderPath.Value = [path,file];
+            
+        end
+
+        % Button pushed function: ClassifyXraysButton
+        function classifyXraysButtonPushed(app, event)
+            
+            modelDirectory = app.ModelFolderPath.Value;
+            classificationDirectory = app.ClassificationFolderPath.Value;
+            
+            parentWindow =  app.ExistingModel;
+            progressBar = uiprogressdlg(parentWindow,'Title','Please Wait!');
+            
+            progressBar.Message = 'Checking Paths...';
+            progressBar.Value = 0;
+            checkPaths(app);
+            pause(1);
+            
+            progressBar.Message = 'Loading Model...';
+            progressBar.Value = 0.2;
+            try
+                modelPackage = load(modelDirectory);
+                model = modelPackage.svmModel;
+                
+            catch msg
+                message = sprintf('Specified model is not valid. Please choose a valid SVM Model!');
+                uialert(parentWindow,message,'Error','Icon','error');
+                return;
+            end
+            pause(1);
+            
+            progressBar.Value = 0.6;
+            progressBar.Message = 'Extracting Features...';
+            featureVectors = extractFeatures(app, classificationDirectory, modelPackage);
+            
+            progressBar.Value = 0.8;
+            progressBar.Message = 'Generating a model...';
+            predictedLabels = predict(model,featureVectors);
+            pause(1);
+            
+            progressBar.Value = 0.9;
+            progressBar.Message = 'Generating a model...';
+            sortImages(app, classificationDirectory, predictedLabels);
+            pause(1);
+            
+            progressBar.Value = 1;
+            progressBar.Message = 'Success...';
+            pause(1);
+            
+            close(progressBar);
+            winopen(classificationDirectory);
+        end
+
+        % Button pushed function: HelpButton
+        function helpButtonPushed(app, event)
+            parentWindow =  app.ExistingModel;
+            message = sprintf('1. Specify image format for the images that are going to be classified\n2. Choose a classification model using the file explorer. If model is not specified, the system will use its own pre-trained model\n3. Select folder that contains images for classification\n4. Classify your images');
+            uialert(parentWindow,message,'Info','Icon','info');
+        end
+
+        % Button pushed function: gitHubButton
+        function gitHubButtonPushed(app, event)
+            url = 'https://github.com/linderfight/XrayClassifier';
+            web(url,'-browser');
+        end
+
+        % Button pushed function: middlesexButton
+        function middlesexButtonPushed(app, event)
+            url = 'https://www.mdx.ac.uk/';
+            web(url,'-browser');
+        end
+    end
+
+    % App initialization and construction
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create ExistingModel
+            app.ExistingModel = uifigure;
+            app.ExistingModel.AutoResizeChildren = 'off';
+            app.ExistingModel.Position = [100 100 578 258];
+            app.ExistingModel.Name = 'Classify Images';
+            app.ExistingModel.Resize = 'off';
+
+            % Create BrowseClassificationFolderButton
+            app.BrowseClassificationFolderButton = uibutton(app.ExistingModel, 'push');
+            app.BrowseClassificationFolderButton.ButtonPushedFcn = createCallbackFcn(app, @browseClassificationFolderButtonPushed, true);
+            app.BrowseClassificationFolderButton.Position = [479 112 72 22];
+            app.BrowseClassificationFolderButton.Text = 'Browse';
+
+            % Create ClassificationmodelLabel
+            app.ClassificationmodelLabel = uilabel(app.ExistingModel);
+            app.ClassificationmodelLabel.HorizontalAlignment = 'right';
+            app.ClassificationmodelLabel.Position = [21 146 116 22];
+            app.ClassificationmodelLabel.Text = 'Classification model:';
+
+            % Create ModelFolderPath
+            app.ModelFolderPath = uieditfield(app.ExistingModel, 'text');
+            app.ModelFolderPath.Editable = 'off';
+            app.ModelFolderPath.Position = [166 146 300 22];
+            app.ModelFolderPath.Value = 'C:\Users\momch\Desktop\NORMAL';
+
+            % Create BrowseModelButton
+            app.BrowseModelButton = uibutton(app.ExistingModel, 'push');
+            app.BrowseModelButton.ButtonPushedFcn = createCallbackFcn(app, @browseModelButtonPushed, true);
+            app.BrowseModelButton.Position = [479 146 72 22];
+            app.BrowseModelButton.Text = 'Browse';
+
+            % Create ClassificationfolderLabel
+            app.ClassificationfolderLabel = uilabel(app.ExistingModel);
+            app.ClassificationfolderLabel.HorizontalAlignment = 'right';
+            app.ClassificationfolderLabel.Position = [21 112 113 22];
+            app.ClassificationfolderLabel.Text = 'Classification folder:';
+
+            % Create ClassificationFolderPath
+            app.ClassificationFolderPath = uieditfield(app.ExistingModel, 'text');
+            app.ClassificationFolderPath.Editable = 'off';
+            app.ClassificationFolderPath.Position = [166 112 300 22];
+            app.ClassificationFolderPath.Value = 'C:\Users\momch\Desktop\NORMAL';
+
+            % Create ClassifyXraysButton
+            app.ClassifyXraysButton = uibutton(app.ExistingModel, 'push');
+            app.ClassifyXraysButton.ButtonPushedFcn = createCallbackFcn(app, @classifyXraysButtonPushed, true);
+            app.ClassifyXraysButton.Position = [241 63 100 22];
+            app.ClassifyXraysButton.Text = 'Classify X-rays';
+
+            % Create footer
+            app.footer = uipanel(app.ExistingModel);
+            app.footer.AutoResizeChildren = 'off';
+            app.footer.Position = [1 1 578 30];
+
+            % Create DevelopedbyLabel
+            app.DevelopedbyLabel = uilabel(app.footer);
+            app.DevelopedbyLabel.HorizontalAlignment = 'center';
+            app.DevelopedbyLabel.FontSize = 8;
+            app.DevelopedbyLabel.FontWeight = 'bold';
+            app.DevelopedbyLabel.Position = [201 14 178 15];
+            app.DevelopedbyLabel.Text = {'Developed by: '; ''};
+
+            % Create MomchilGalabovLabel
+            app.MomchilGalabovLabel = uilabel(app.footer);
+            app.MomchilGalabovLabel.HorizontalAlignment = 'center';
+            app.MomchilGalabovLabel.FontSize = 8;
+            app.MomchilGalabovLabel.Position = [200 1 178 22];
+            app.MomchilGalabovLabel.Text = {'Momchil Galabov'; ''};
+
+            % Create middlesexButton
+            app.middlesexButton = uibutton(app.footer, 'push');
+            app.middlesexButton.ButtonPushedFcn = createCallbackFcn(app, @middlesexButtonPushed, true);
+            app.middlesexButton.Interruptible = 'off';
+            app.middlesexButton.Icon = 'mdx-london-logo-red-black.png';
+            app.middlesexButton.Position = [519 0 58 29];
+            app.middlesexButton.Text = '';
+
+            % Create gitHubButton
+            app.gitHubButton = uibutton(app.footer, 'push');
+            app.gitHubButton.ButtonPushedFcn = createCallbackFcn(app, @gitHubButtonPushed, true);
+            app.gitHubButton.Interruptible = 'off';
+            app.gitHubButton.Icon = 'github-logo.png';
+            app.gitHubButton.BackgroundColor = [1 1 1];
+            app.gitHubButton.Position = [1 1 57 28];
+            app.gitHubButton.Text = '';
+
+            % Create ImageformatLabel
+            app.ImageformatLabel = uilabel(app.ExistingModel);
+            app.ImageformatLabel.Position = [56 210 80 22];
+            app.ImageformatLabel.Text = 'Image format:';
+
+            % Create ImageFormatButtons
+            app.ImageFormatButtons = uibuttongroup(app.ExistingModel);
+            app.ImageFormatButtons.AutoResizeChildren = 'off';
+            app.ImageFormatButtons.Position = [165 181 100 51];
+
+            % Create JPEGButton
+            app.JPEGButton = uiradiobutton(app.ImageFormatButtons);
+            app.JPEGButton.Text = 'JPEG';
+            app.JPEGButton.Position = [11 24 58 22];
+            app.JPEGButton.Value = true;
+
+            % Create JPGButton
+            app.JPGButton = uiradiobutton(app.ImageFormatButtons);
+            app.JPGButton.Text = 'JPG';
+            app.JPGButton.Position = [11 2 65 22];
+
+            % Create HelpButton
+            app.HelpButton = uibutton(app.ExistingModel, 'push');
+            app.HelpButton.ButtonPushedFcn = createCallbackFcn(app, @helpButtonPushed, true);
+            app.HelpButton.Icon = 'question.png';
+            app.HelpButton.Position = [495 63 39 33];
+            app.HelpButton.Text = '';
+        end
+    end
+
+    methods (Access = public)
+
+        % Construct app
+        function app = existingModel
+
+            % Create and configure components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.ExistingModel)
+
+            % Execute the startup function
+            runStartupFcn(app, @loadModel)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.ExistingModel)
+        end
+    end
+end

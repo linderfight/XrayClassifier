@@ -1,0 +1,163 @@
+classdef xRayClassifier < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        MainWindow                 matlab.ui.Figure
+        footer                     matlab.ui.container.Panel
+        DevelopedbyLabel           matlab.ui.control.Label
+        MomchilGalabovLabel        matlab.ui.control.Label
+        middlesexButton            matlab.ui.control.Button
+        gitHubButton               matlab.ui.control.Button
+        TrainaNewModelButton       matlab.ui.control.Button
+        ClassifyImagesButton       matlab.ui.control.Button
+        Button                     matlab.ui.control.Button
+        XrayClassifierLabel        matlab.ui.control.Label
+        TestanExistingModelButton  matlab.ui.control.Button
+    end
+
+    % adds the images folder to the MATLAB path for easier access
+    properties (Access = private)
+        oldpath = addpath('./images') 
+    end
+
+
+    methods (Access = private)
+
+        % Button pushed function: middlesexButton
+        function middlesexButtonPushed(app, event)
+            url = 'https://www.mdx.ac.uk/';
+            web(url,'-browser');
+        end
+
+        % Button pushed function: gitHubButton
+        function gitHubButtonPushed(app, event)
+            url = 'https://github.com/linderfight/XrayClassifier';
+            web(url,'-browser');
+        end
+
+        % Button pushed function: TrainaNewModelButton
+        function trainNewModelButtonPushed(app, event)
+            newModel;
+            app.delete;
+        end
+
+        % Button pushed function: ClassifyImagesButton
+        function classifyImagesButtonPushed(app, event)
+            existingModel;
+            app.delete;
+        end
+
+        % Button pushed function: TestanExistingModelButton
+        function testModelButtonPushed(app, event)
+            testModel;
+            app.delete;
+        end
+    end
+
+    % App initialization and construction
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create MainWindow
+            app.MainWindow = uifigure;
+            app.MainWindow.Position = [100 100 399 520];
+            app.MainWindow.Name = 'X-ray Classifier';
+            app.MainWindow.Resize = 'off';
+
+            % Create footer
+            app.footer = uipanel(app.MainWindow);
+            app.footer.Position = [1 1 399 30];
+
+            % Create DevelopedbyLabel
+            app.DevelopedbyLabel = uilabel(app.footer);
+            app.DevelopedbyLabel.HorizontalAlignment = 'center';
+            app.DevelopedbyLabel.FontSize = 8;
+            app.DevelopedbyLabel.FontWeight = 'bold';
+            app.DevelopedbyLabel.Position = [111 14 178 15];
+            app.DevelopedbyLabel.Text = {'Developed by: '; ''};
+
+            % Create MomchilGalabovLabel
+            app.MomchilGalabovLabel = uilabel(app.footer);
+            app.MomchilGalabovLabel.HorizontalAlignment = 'center';
+            app.MomchilGalabovLabel.FontSize = 8;
+            app.MomchilGalabovLabel.Position = [110 1 178 22];
+            app.MomchilGalabovLabel.Text = {'Momchil Galabov'; ''};
+
+            % Create middlesexButton
+            app.middlesexButton = uibutton(app.footer, 'push');
+            app.middlesexButton.ButtonPushedFcn = createCallbackFcn(app, @middlesexButtonPushed, true);
+            app.middlesexButton.Interruptible = 'off';
+            app.middlesexButton.Icon = 'mdx-london-logo-red-black.png';
+            app.middlesexButton.Position = [340 1 58 29];
+            app.middlesexButton.Text = '';
+
+            % Create gitHubButton
+            app.gitHubButton = uibutton(app.footer, 'push');
+            app.gitHubButton.ButtonPushedFcn = createCallbackFcn(app, @gitHubButtonPushed, true);
+            app.gitHubButton.Interruptible = 'off';
+            app.gitHubButton.Icon = 'github-logo.png';
+            app.gitHubButton.BackgroundColor = [1 1 1];
+            app.gitHubButton.Position = [1 1 57 28];
+            app.gitHubButton.Text = '';
+
+            % Create TrainaNewModelButton
+            app.TrainaNewModelButton = uibutton(app.MainWindow, 'push');
+            app.TrainaNewModelButton.ButtonPushedFcn = createCallbackFcn(app, @trainNewModelButtonPushed, true);
+            app.TrainaNewModelButton.Position = [112 129 178 36];
+            app.TrainaNewModelButton.Text = 'Train a New Model';
+
+            % Create ClassifyImagesButton
+            app.ClassifyImagesButton = uibutton(app.MainWindow, 'push');
+            app.ClassifyImagesButton.ButtonPushedFcn = createCallbackFcn(app, @classifyImagesButtonPushed, true);
+            app.ClassifyImagesButton.Position = [112 178 178 36];
+            app.ClassifyImagesButton.Text = 'Classify Images';
+
+            % Create Button
+            app.Button = uibutton(app.MainWindow, 'push');
+            app.Button.Icon = 'radiology-utsw-banner-600x338.jpg';
+            app.Button.BackgroundColor = [0.9412 0.9412 0.9412];
+            app.Button.Position = [58 238 284 162];
+            app.Button.Text = '';
+
+            % Create XrayClassifierLabel
+            app.XrayClassifierLabel = uilabel(app.MainWindow);
+            app.XrayClassifierLabel.HorizontalAlignment = 'center';
+            app.XrayClassifierLabel.FontName = 'Arial';
+            app.XrayClassifierLabel.FontSize = 25;
+            app.XrayClassifierLabel.Position = [58 415 284 73];
+            app.XrayClassifierLabel.Text = 'X-ray Classifier';
+
+            % Create TestanExistingModelButton
+            app.TestanExistingModelButton = uibutton(app.MainWindow, 'push');
+            app.TestanExistingModelButton.ButtonPushedFcn = createCallbackFcn(app, @testModelButtonPushed, true);
+            app.TestanExistingModelButton.Position = [112 81 178 36];
+            app.TestanExistingModelButton.Text = 'Test an Existing Model';
+        end
+    end
+
+    methods (Access = public)
+
+        % Construct app
+        function app = xRayClassifier
+
+            % Create and configure components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.MainWindow)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.MainWindow)
+        end
+    end
+end

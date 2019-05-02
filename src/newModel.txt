@@ -1,0 +1,481 @@
+classdef newModel < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        NewModel                     matlab.ui.Figure
+        footer                       matlab.ui.container.Panel
+        gitHubButton                 matlab.ui.control.Button
+        middlesexButton              matlab.ui.control.Button
+        DevelopedbyLabel             matlab.ui.control.Label
+        MomchilGalabovLabel          matlab.ui.control.Label
+        ButtonGroup                  matlab.ui.container.ButtonGroup
+        JPEGButtonTrain              matlab.ui.control.RadioButton
+        JPGButtonTrain               matlab.ui.control.RadioButton
+        ImageformatLabel             matlab.ui.control.Label
+        BrowseHealthyPath            matlab.ui.control.Button
+        HealthyXraysfolderpathtraindataLabel  matlab.ui.control.Label
+        HealthyFolderPath            matlab.ui.control.EditField
+        UnhealthyXraysfolderpathtraindataLabel  matlab.ui.control.Label
+        UnhealthyFolderPath          matlab.ui.control.EditField
+        BrowseUnhealthyPath          matlab.ui.control.Button
+        FolderpathformodelLabel      matlab.ui.control.Label
+        ModelFolderPath              matlab.ui.control.EditField
+        BrowseModelPath              matlab.ui.control.Button
+        NameyourmodelLabel           matlab.ui.control.Label
+        ModelName                    matlab.ui.control.EditField
+        GenerateModelButton_2        matlab.ui.control.Button
+        LBPParametersPanel_2         matlab.ui.container.Panel
+        Neighbours424Spinner_2Label  matlab.ui.control.Label
+        NumNeighbours                matlab.ui.control.Spinner
+        Radius15Spinner_2Label       matlab.ui.control.Label
+        Radius                       matlab.ui.control.Spinner
+        HelpButton                   matlab.ui.control.Button
+    end
+
+    methods (Access = private)
+        
+        % Counts images of a specific type within a folder
+        % Returns the image count
+        function imageCount = checkImageCount(app, folderPath, imageFormat)
+            a = dir(fullfile(folderPath, imageFormat));
+            imageCount = size(a,1);
+        end
+        
+        % Determines the image format of photos using the radio button
+        % Returns the image format 
+        function imageFormatTrain = getImageFormatTrain(app)
+            if app.JPEGButtonTrain.Value == 1
+                imageFormatTrain = '*.jpeg';
+            elseif app.JPEGButtonTrain.Value == 1
+                imageFormatTrain = '*.jpg';
+            end
+            
+        end
+        
+        % Checking contents of folders for training
+        function [] = checkPathsTrain(app)
+            
+            healthyFolderPath = app.HealthyFolderPath.Value;
+            unhealthyFolderPath = app.UnhealthyFolderPath.Value;
+            modelFile = strcat(app.ModelName.Value, '.mat');
+            modelPath = app.ModelFolderPath.Value;
+            
+            imageFormat = getImageFormatTrain(app);
+            
+            healthyImageCount = checkImageCount(app, healthyFolderPath, imageFormat);
+            unhealthyImageCount = checkImageCount(app, unhealthyFolderPath, imageFormat);
+            
+            % check if model name exists
+            cd(modelPath);
+            
+            if healthyImageCount == 0
+                f = app.NewModel;
+                message = sprintf('The healthy x-rays folder does not contain images of the format specified. Please change the image format or add images!');
+                uialert(f,message,'Error','Icon','error');
+                error('X');
+            elseif healthyImageCount < 5
+                f = app.NewModel;
+                message = sprintf('A model requires at least 1000 images for training. Please add more images to the folder with healthy x-rays');
+                uialert(f,message,'Error','Icon','error');
+                error('X');
+            elseif unhealthyImageCount == 0
+                f = app.NewModel;
+                message = sprintf('The Diseased x-rays folder does not contain images of the format specified. Please change the image format or add images!');
+                uialert(f,message,'Error','Icon','error');
+                error('X');
+            elseif unhealthyImageCount < 5
+                f = app.NewModel;
+                message = sprintf('A model requires at least 1000 images for training. Please add more images to the folder with Diseased x-rays');
+                uialert(f,message,'Error','Icon','error');
+                error('X');
+            elseif exist(modelFile, 'file') == 2
+                f = app.NewModel;
+                message = sprintf('Model with the name "%s" already exists. Please use a different name! ', app.ModelName.Value);
+                uialert(f,message,'Error','Icon','error');
+                error('X');
+            end
+            
+        end
+        
+        % Retrieves the labels of images for testing and saves them in the Accuracy file
+        function [] = generateLabelsTrain(app, classes)
+            
+            imageFormat = getImageFormatTrain(app);
+            healthyFolderPath = app.HealthyFolderPath.Value;
+            unhealthyFolderPath = app.UnhealthyFolderPath.Value;
+            modelFolderPath = app.ModelFolderPath.Value;
+            
+            cd(unhealthyFolderPath);
+            A = dir(imageFormat);
+            labelsArrA = repmat(classes(1),size(A,1),1);
+            
+            cd(healthyFolderPath);
+            N = dir(imageFormat);
+            labelsArrN = repmat(classes(2),size(N,1),1);
+            
+            labels = [labelsArrA; labelsArrN];
+            cd(modelFolderPath);
+            save('TrainData','labels');
+            
+        end
+        
+        % Extracts features and generates a feature vector for each image
+        % Saves the array of feature vetctors in the featureVectors 2d array
+        function [] = extractFeaturesTrain(app, numNeighbours, radius)
+            
+            featureVectors = zeros(0,0);
+            
+            healthyFolderPath = app.HealthyFolderPath.Value;
+            unhealthyFolderPath = app.UnhealthyFolderPath.Value;
+            imageFormat = getImageFormatTrain(app);
+            
+            for i = 1 : 2
+                
+                folderPath = '';
+                if i == 1
+                    folderPath = unhealthyFolderPath;
+                elseif i == 2
+                    folderPath = healthyFolderPath;
+                end
+                
+                imageFiles = dir(fullfile(folderPath,imageFormat));
+                
+                for j = 1 : length(imageFiles)
+                    baseFileName = imageFiles(j).name;
+                    fullFileName = fullfile(folderPath, baseFileName);
+                    image = imread(fullFileName);
+                    
+                    if size(image,3)== 3
+                        image = rgb2gray(image);
+                    end
+                    imageLBP = extractLBPFeatures(image,'Upright',false,'Radius',radius,'NumNeighbors',numNeighbours);
+                    
+                    featureVectors = [featureVectors; imageLBP];
+                end
+            end
+            
+            featureVectors = array2table(featureVectors);
+            
+            save('TrainData','featureVectors','-append');
+        end
+        
+        % Trains an SVM model along with hyperparameters in the folder specified by the user
+        function [] = trainModel(app, numNeighbours, radius)
+            modelDirectory = app.ModelFolderPath.Value;
+            modelName = app.ModelName.Value;
+            cd(modelDirectory);
+            
+            trainData = load('TrainData');
+            svmModel = fitcsvm(trainData.featureVectors,trainData.labels);
+            save(modelName,'svmModel');
+            save(modelName,'numNeighbours','-append');
+            save(modelName,'radius','-append');
+            delete('TrainData.mat');
+        end
+
+    end
+
+    methods (Access = private)
+
+        % Button pushed function: BrowseHealthyPath
+        function browseHealthyPathButtonPushed(app, event)
+            folderPath = uigetdir('C://','Select the folder containing healthy X-ray scans');
+            
+            if folderPath == 0
+                return
+            end
+            app.HealthyFolderPath.Value = folderPath;
+        end
+
+        % Button pushed function: BrowseUnhealthyPath
+        function browseUnhealthyPathButtonPushed(app, event)
+            
+            folderPath = uigetdir('C://','Select the folder containing Unhealthy X-ray scans');
+            
+            if folderPath == 0
+                return
+            end
+            app.UnhealthyFolderPath.Value = folderPath;
+        end
+
+        % Button pushed function: GenerateModelButton_2
+        function generateModelButtonPushed(app, event)
+            numNeighbours = app.NumNeighbours.Value;
+            radius = app.Radius.Value;
+
+            classes = ["diseased", "healthy"];
+            
+            parentWindow =  app.NewModel;
+            
+            progressBar = uiprogressdlg(parentWindow,'Title','Please Wait!');
+            
+            progressBar.Message = 'Checking Paths...';
+            progressBar.Value = 0;
+            checkPathsTrain(app);
+            pause(1);
+            
+            progressBar.Message = 'Generating Lables...';
+            progressBar.Value = 0.2;
+            generateLabelsTrain(app, classes);
+            pause(1);
+            
+            progressBar.Value = 0.6;
+            progressBar.Message = 'Extracting Features...';
+            extractFeaturesTrain(app, numNeighbours, radius);
+            
+            
+            progressBar.Value = 0.9;
+            progressBar.Message = 'Generating a model...';
+            trainModel(app, numNeighbours, radius);
+            
+            progressBar.Value = 1;
+            progressBar.Message = 'Finishing...';
+            pause(1);
+            
+            close(progressBar);
+            
+            close(progressBar);
+            message = sprintf('You have successfully trained a model! The model has been saved in the follwing directory "%s". You can now test your model', app.ModelFolderPath.Value);
+            uialert(parentWindow,message,'Success','Icon','success');
+            
+        end
+
+        % Button pushed function: BrowseModelPath
+        function browseModelPathButtonPushed(app, event)
+            folderPath = uigetdir('C://','Select a folder for your model');
+            
+            if folderPath == 0
+                return
+            end
+            
+            app.ModelFolderPath.Value = folderPath;
+            
+        end
+
+        % Button pushed function: HelpButton
+        function helpButtonPushed(app, event)
+            parentWindow =  app.NewModel;
+            message = sprintf('');
+            uialert(parentWindow,message,'Info','Icon','info');
+        end
+
+        % Button pushed function: gitHubButton
+        function gitHubButtonPushed(app, event)
+            url = 'https://github.com/linderfight/XrayClassifier';
+            web(url,'-browser');
+        end
+
+        % Button pushed function: middlesexButton
+        function middlesexButtonPushed(app, event)
+            url = 'https://www.mdx.ac.uk/';
+            web(url,'-browser');
+        end
+    end
+
+    % App initialization and construction
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create NewModel
+            app.NewModel = uifigure;
+            app.NewModel.AutoResizeChildren = 'off';
+            app.NewModel.Position = [100 100 664 559];
+            app.NewModel.Name = 'Generate a new Model';
+            app.NewModel.Resize = 'off';
+
+            % Create footer
+            app.footer = uipanel(app.NewModel);
+            app.footer.AutoResizeChildren = 'off';
+            app.footer.Position = [1 1 663 30];
+
+            % Create gitHubButton
+            app.gitHubButton = uibutton(app.footer, 'push');
+            app.gitHubButton.ButtonPushedFcn = createCallbackFcn(app, @gitHubButtonPushed, true);
+            app.gitHubButton.Interruptible = 'off';
+            app.gitHubButton.Icon = 'github-logo.png';
+            app.gitHubButton.BackgroundColor = [1 1 1];
+            app.gitHubButton.Position = [1 1 57 28];
+            app.gitHubButton.Text = '';
+
+            % Create middlesexButton
+            app.middlesexButton = uibutton(app.footer, 'push');
+            app.middlesexButton.ButtonPushedFcn = createCallbackFcn(app, @middlesexButtonPushed, true);
+            app.middlesexButton.Interruptible = 'off';
+            app.middlesexButton.Icon = 'mdx-london-logo-red-black.png';
+            app.middlesexButton.Position = [604 1 58 28];
+            app.middlesexButton.Text = '';
+
+            % Create DevelopedbyLabel
+            app.DevelopedbyLabel = uilabel(app.footer);
+            app.DevelopedbyLabel.HorizontalAlignment = 'center';
+            app.DevelopedbyLabel.FontSize = 10;
+            app.DevelopedbyLabel.FontWeight = 'bold';
+            app.DevelopedbyLabel.Position = [233 16 178 13];
+            app.DevelopedbyLabel.Text = {'Developed by: '; ''};
+
+            % Create MomchilGalabovLabel
+            app.MomchilGalabovLabel = uilabel(app.footer);
+            app.MomchilGalabovLabel.HorizontalAlignment = 'center';
+            app.MomchilGalabovLabel.FontSize = 10;
+            app.MomchilGalabovLabel.Position = [261 1 125 16];
+            app.MomchilGalabovLabel.Text = {'Momchil Galabov'; ''};
+
+            % Create ButtonGroup
+            app.ButtonGroup = uibuttongroup(app.NewModel);
+            app.ButtonGroup.AutoResizeChildren = 'off';
+            app.ButtonGroup.Position = [252 500 100 51];
+
+            % Create JPEGButtonTrain
+            app.JPEGButtonTrain = uiradiobutton(app.ButtonGroup);
+            app.JPEGButtonTrain.Text = 'JPEG';
+            app.JPEGButtonTrain.Position = [11 24 58 22];
+            app.JPEGButtonTrain.Value = true;
+
+            % Create JPGButtonTrain
+            app.JPGButtonTrain = uiradiobutton(app.ButtonGroup);
+            app.JPGButtonTrain.Text = 'JPG';
+            app.JPGButtonTrain.Position = [11 2 65 22];
+
+            % Create ImageformatLabel
+            app.ImageformatLabel = uilabel(app.NewModel);
+            app.ImageformatLabel.Position = [155 529 80 22];
+            app.ImageformatLabel.Text = 'Image format:';
+
+            % Create BrowseHealthyPath
+            app.BrowseHealthyPath = uibutton(app.NewModel, 'push');
+            app.BrowseHealthyPath.ButtonPushedFcn = createCallbackFcn(app, @browseHealthyPathButtonPushed, true);
+            app.BrowseHealthyPath.Position = [572 462 72 22];
+            app.BrowseHealthyPath.Text = 'Browse';
+
+            % Create HealthyXraysfolderpathtraindataLabel
+            app.HealthyXraysfolderpathtraindataLabel = uilabel(app.NewModel);
+            app.HealthyXraysfolderpathtraindataLabel.HorizontalAlignment = 'right';
+            app.HealthyXraysfolderpathtraindataLabel.Position = [23 462 213 22];
+            app.HealthyXraysfolderpathtraindataLabel.Text = 'Healthy X-rays folder path ( train data):';
+
+            % Create HealthyFolderPath
+            app.HealthyFolderPath = uieditfield(app.NewModel, 'text');
+            app.HealthyFolderPath.Editable = 'off';
+            app.HealthyFolderPath.Position = [254 462 300 22];
+            app.HealthyFolderPath.Value = 'C:\train\NORMAL';
+
+            % Create UnhealthyXraysfolderpathtraindataLabel
+            app.UnhealthyXraysfolderpathtraindataLabel = uilabel(app.NewModel);
+            app.UnhealthyXraysfolderpathtraindataLabel.HorizontalAlignment = 'right';
+            app.UnhealthyXraysfolderpathtraindataLabel.Position = [8 431 228 22];
+            app.UnhealthyXraysfolderpathtraindataLabel.Text = 'Unhealthy X-rays folder path (train data) :';
+
+            % Create UnhealthyFolderPath
+            app.UnhealthyFolderPath = uieditfield(app.NewModel, 'text');
+            app.UnhealthyFolderPath.Editable = 'off';
+            app.UnhealthyFolderPath.Position = [254 431 300 22];
+            app.UnhealthyFolderPath.Value = 'C:\train\ABNORMAL';
+
+            % Create BrowseUnhealthyPath
+            app.BrowseUnhealthyPath = uibutton(app.NewModel, 'push');
+            app.BrowseUnhealthyPath.ButtonPushedFcn = createCallbackFcn(app, @browseUnhealthyPathButtonPushed, true);
+            app.BrowseUnhealthyPath.Position = [572 431 72 22];
+            app.BrowseUnhealthyPath.Text = 'Browse';
+
+            % Create FolderpathformodelLabel
+            app.FolderpathformodelLabel = uilabel(app.NewModel);
+            app.FolderpathformodelLabel.HorizontalAlignment = 'right';
+            app.FolderpathformodelLabel.Position = [112 397 123 22];
+            app.FolderpathformodelLabel.Text = {'Folder path for model:'; ''};
+
+            % Create ModelFolderPath
+            app.ModelFolderPath = uieditfield(app.NewModel, 'text');
+            app.ModelFolderPath.Editable = 'off';
+            app.ModelFolderPath.Position = [254 397 300 22];
+            app.ModelFolderPath.Value = 'C:\train\Model';
+
+            % Create BrowseModelPath
+            app.BrowseModelPath = uibutton(app.NewModel, 'push');
+            app.BrowseModelPath.ButtonPushedFcn = createCallbackFcn(app, @browseModelPathButtonPushed, true);
+            app.BrowseModelPath.Position = [572 397 73 22];
+            app.BrowseModelPath.Text = 'Browse';
+
+            % Create NameyourmodelLabel
+            app.NameyourmodelLabel = uilabel(app.NewModel);
+            app.NameyourmodelLabel.HorizontalAlignment = 'right';
+            app.NameyourmodelLabel.Position = [133 361 104 22];
+            app.NameyourmodelLabel.Text = 'Name your model:';
+
+            % Create ModelName
+            app.ModelName = uieditfield(app.NewModel, 'text');
+            app.ModelName.Position = [254 361 125 22];
+            app.ModelName.Value = 'Model1';
+
+            % Create GenerateModelButton_2
+            app.GenerateModelButton_2 = uibutton(app.NewModel, 'push');
+            app.GenerateModelButton_2.ButtonPushedFcn = createCallbackFcn(app, @generateModelButtonPushed, true);
+            app.GenerateModelButton_2.Position = [269 91 127 22];
+            app.GenerateModelButton_2.Text = 'Generate Model';
+
+            % Create LBPParametersPanel_2
+            app.LBPParametersPanel_2 = uipanel(app.NewModel);
+            app.LBPParametersPanel_2.AutoResizeChildren = 'off';
+            app.LBPParametersPanel_2.Title = 'LBP Parameters';
+            app.LBPParametersPanel_2.Position = [23 138 621 203];
+
+            % Create Neighbours424Spinner_2Label
+            app.Neighbours424Spinner_2Label = uilabel(app.LBPParametersPanel_2);
+            app.Neighbours424Spinner_2Label.HorizontalAlignment = 'right';
+            app.Neighbours424Spinner_2Label.Position = [36 134 112 22];
+            app.Neighbours424Spinner_2Label.Text = 'Neighbours (4 - 24):';
+
+            % Create NumNeighbours
+            app.NumNeighbours = uispinner(app.LBPParametersPanel_2);
+            app.NumNeighbours.Limits = [4 24];
+            app.NumNeighbours.ValueDisplayFormat = '%.0f';
+            app.NumNeighbours.Position = [166 134 65 22];
+            app.NumNeighbours.Value = 8;
+
+            % Create Radius15Spinner_2Label
+            app.Radius15Spinner_2Label = uilabel(app.LBPParametersPanel_2);
+            app.Radius15Spinner_2Label.HorizontalAlignment = 'right';
+            app.Radius15Spinner_2Label.Position = [73 87 75 22];
+            app.Radius15Spinner_2Label.Text = 'Radius (1-5):';
+
+            % Create Radius
+            app.Radius = uispinner(app.LBPParametersPanel_2);
+            app.Radius.Limits = [1 5];
+            app.Radius.ValueDisplayFormat = '%.0f';
+            app.Radius.Position = [166 87 65 22];
+            app.Radius.Value = 1;
+
+            % Create HelpButton
+            app.HelpButton = uibutton(app.NewModel, 'push');
+            app.HelpButton.ButtonPushedFcn = createCallbackFcn(app, @helpButtonPushed, true);
+            app.HelpButton.Icon = 'question.png';
+            app.HelpButton.Position = [589 80 39 33];
+            app.HelpButton.Text = '';
+        end
+    end
+
+    methods (Access = public)
+
+        % Construct app
+        function app = newModel
+
+            % Create and configure components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.NewModel)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.NewModel)
+        end
+    end
+end

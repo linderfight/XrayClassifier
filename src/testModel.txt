@@ -394,7 +394,7 @@ classdef testModel < matlab.apps.AppBase
             app.HealthyFolderPathTest = uieditfield(app.ModelTesting, 'text');
             app.HealthyFolderPathTest.Editable = 'off';
             app.HealthyFolderPathTest.Position = [226 168 301 22];
-            app.HealthyFolderPathTest.Value = 'C:\Users\momch\Desktop\Final Year project\Implementation\Classifier\Dataset\test\HEALTHY';
+            app.HealthyFolderPathTest.Value = 'C:\';
 
             % Create UnhealthyXRayfoldertestdataLabel
             app.UnhealthyXRayfoldertestdataLabel = uilabel(app.ModelTesting);
@@ -406,7 +406,7 @@ classdef testModel < matlab.apps.AppBase
             app.UnhealthyFolderPathTest = uieditfield(app.ModelTesting, 'text');
             app.UnhealthyFolderPathTest.Editable = 'off';
             app.UnhealthyFolderPathTest.Position = [226 137 301 22];
-            app.UnhealthyFolderPathTest.Value = 'C:\Users\momch\Desktop\Final Year project\Implementation\Classifier\Dataset\test\DISEASED';
+            app.UnhealthyFolderPathTest.Value = 'C:\';
 
             % Create HelpButton
             app.HelpButton = uibutton(app.ModelTesting, 'push');
@@ -431,7 +431,7 @@ classdef testModel < matlab.apps.AppBase
             app.ModelFolderPath = uieditfield(app.ModelTesting, 'text');
             app.ModelFolderPath.Editable = 'off';
             app.ModelFolderPath.Position = [227 203 300 22];
-            app.ModelFolderPath.Value = 'C:\Users\momch\Desktop\Final Year project\Implementation\Classifier\XrayClassifierApp\preTrainedModel\trainedModel.mat';
+            app.ModelFolderPath.Value = 'C:\';
 
             % Create BrowseTestResultsFolderPathButton
             app.BrowseTestResultsFolderPathButton = uibutton(app.ModelTesting, 'push');
@@ -449,7 +449,7 @@ classdef testModel < matlab.apps.AppBase
             app.TestResultsPath = uieditfield(app.ModelTesting, 'text');
             app.TestResultsPath.Editable = 'off';
             app.TestResultsPath.Position = [227 99 300 22];
-            app.TestResultsPath.Value = 'C:\Users\momch\Desktop\Final Year project\Implementation\Classifier\Dataset\test\results';
+            app.TestResultsPath.Value = 'C:\';
         end
     end
 

@@ -359,7 +359,7 @@ classdef newModel < matlab.apps.AppBase
             app.HealthyFolderPath = uieditfield(app.NewModel, 'text');
             app.HealthyFolderPath.Editable = 'off';
             app.HealthyFolderPath.Position = [254 462 300 22];
-            app.HealthyFolderPath.Value = 'C:\train\NORMAL';
+            app.HealthyFolderPath.Value = 'C:\';
 
             % Create UnhealthyXraysfolderpathtraindataLabel
             app.UnhealthyXraysfolderpathtraindataLabel = uilabel(app.NewModel);
@@ -371,7 +371,7 @@ classdef newModel < matlab.apps.AppBase
             app.UnhealthyFolderPath = uieditfield(app.NewModel, 'text');
             app.UnhealthyFolderPath.Editable = 'off';
             app.UnhealthyFolderPath.Position = [254 431 300 22];
-            app.UnhealthyFolderPath.Value = 'C:\train\ABNORMAL';
+            app.UnhealthyFolderPath.Value = 'C:\';
 
             % Create BrowseUnhealthyPath
             app.BrowseUnhealthyPath = uibutton(app.NewModel, 'push');
@@ -389,7 +389,7 @@ classdef newModel < matlab.apps.AppBase
             app.ModelFolderPath = uieditfield(app.NewModel, 'text');
             app.ModelFolderPath.Editable = 'off';
             app.ModelFolderPath.Position = [254 397 300 22];
-            app.ModelFolderPath.Value = 'C:\train\Model';
+            app.ModelFolderPath.Value = 'C:\';
 
             % Create BrowseModelPath
             app.BrowseModelPath = uibutton(app.NewModel, 'push');

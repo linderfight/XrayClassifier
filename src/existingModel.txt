@@ -246,7 +246,7 @@ classdef existingModel < matlab.apps.AppBase
             app.ModelFolderPath = uieditfield(app.ExistingModel, 'text');
             app.ModelFolderPath.Editable = 'off';
             app.ModelFolderPath.Position = [166 146 300 22];
-            app.ModelFolderPath.Value = 'C:\Users\momch\Desktop\NORMAL';
+            app.ModelFolderPath.Value = 'C:\';
 
             % Create BrowseModelButton
             app.BrowseModelButton = uibutton(app.ExistingModel, 'push');
@@ -264,7 +264,7 @@ classdef existingModel < matlab.apps.AppBase
             app.ClassificationFolderPath = uieditfield(app.ExistingModel, 'text');
             app.ClassificationFolderPath.Editable = 'off';
             app.ClassificationFolderPath.Position = [166 112 300 22];
-            app.ClassificationFolderPath.Value = 'C:\Users\momch\Desktop\NORMAL';
+            app.ClassificationFolderPath.Value = 'C:\';
 
             % Create ClassifyXraysButton
             app.ClassifyXraysButton = uibutton(app.ExistingModel, 'push');
